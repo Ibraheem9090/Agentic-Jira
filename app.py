@@ -127,10 +127,10 @@ def build_preview(component_code: str) -> str:
 <html>
 <head>
     <meta charset="UTF-8" />
-    <script src="[https://unpkg.com/react@18/umd/react.development.js](https://unpkg.com/react@18/umd/react.development.js)"></script>
-    <script src="[https://unpkg.com/react-dom@18/umd/react-dom.development.js](https://unpkg.com/react-dom@18/umd/react-dom.development.js)"></script>
-    <script src="[https://unpkg.com/@babel/standalone@7/babel.min.js](https://unpkg.com/@babel/standalone@7/babel.min.js)"></script>
-    <script src="[https://cdn.tailwindcss.com](https://cdn.tailwindcss.com)"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.development.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.development.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.10/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body {{ background-color: #020617; color: #f8fafc; font-family: system-ui, sans-serif; padding: 16px; margin: 0; }}
         #root {{ background: #1e293b; border: 1px solid #334155; padding: 20px; border-radius: 8px; min-height: 250px; }}
@@ -149,59 +149,67 @@ def build_preview(component_code: str) -> str:
             showError(message);
         }};
 
-        try {{
-            const rawCode = `{escaped_code}`;
+        // Defer execution until all CDN scripts (React, ReactDOM, Babel) are fully loaded
+        window.onload = function() {{
+            if (typeof Babel === 'undefined') {{
+                showError("Babel CDN failed to load. Check network connection or retry.");
+                return;
+            }}
 
-            // 1. Strip ES Module import and export syntax
-            let cleanCode = rawCode
-                .replace(/import\s+[\s\S]*?from\s+['"][^'"]+['"];?/g, '')
-                .replace(/import\s+['"][^'"]+['"];?/g, '')
-                .replace(/export\s+default\s+/g, '')
-                .replace(/export\s+/g, '');
+            try {{
+                const rawCode = `{escaped_code}`;
 
-            // 2. Transpile TSX/JSX with strict filename mapping
-            const transpiled = Babel.transform(cleanCode, {{
-                filename: 'Component.tsx',
-                presets: ['react', 'typescript']
-            }}).code;
+                // 1. Strip ES Module import and export syntax
+                let cleanCode = rawCode
+                    .replace(/import\s+[\s\S]*?from\s+['"][^'"]+['"];?/g, '')
+                    .replace(/import\s+['"][^'"]+['"];?/g, '')
+                    .replace(/export\s+default\s+/g, '')
+                    .replace(/export\s+/g, '');
 
-            // 3. Execute in scope with standard React hooks
-            const {{ useState, useEffect, useCallback, useMemo, useRef, useReducer }} = React;
+                // 2. Transpile TSX/JSX with strict filename mapping
+                const transpiled = Babel.transform(cleanCode, {{
+                    filename: 'Component.tsx',
+                    presets: ['react', 'typescript']
+                }}).code;
 
-            const execFn = new Function(
-                'React', 'useState', 'useEffect', 'useCallback', 'useMemo', 'useRef', 'useReducer',
-                `
-                ${{transpiled}}
+                // 3. Execute in scope with standard React hooks
+                const {{ useState, useEffect, useCallback, useMemo, useRef, useReducer }} = React;
 
-                let Comp = null;
-                if (typeof App !== 'undefined') Comp = App;
-                
-                if (!Comp) {{
-                    const vars = Object.keys(window);
-                    for (let v of vars) {{
-                        if (typeof window[v] === 'function' && /^[A-Z]/.test(v)) {{
-                            Comp = window[v];
-                            break;
+                const execFn = new Function(
+                    'React', 'useState', 'useEffect', 'useCallback', 'useMemo', 'useRef', 'useReducer',
+                    `
+                    ${{transpiled}}
+
+                    let Comp = null;
+                    if (typeof App !== 'undefined') Comp = App;
+                    
+                    if (!Comp) {{
+                        const vars = Object.keys(window);
+                        for (let v of vars) {{
+                            if (typeof window[v] === 'function' && /^[A-Z]/.test(v)) {{
+                                Comp = window[v];
+                                break;
+                            }}
                         }}
                     }}
+                    return Comp;
+                    `
+                );
+
+                const ComponentToRender = execFn.call(
+                    window, React, useState, useEffect, useCallback, useMemo, useRef, useReducer
+                );
+
+                if (ComponentToRender) {{
+                    const root = ReactDOM.createRoot(document.getElementById('root'));
+                    root.render(React.createElement(ComponentToRender));
+                }} else {{
+                    showError("No valid React component found in generated code.");
                 }}
-                return Comp;
-                `
-            );
-
-            const ComponentToRender = execFn.call(
-                window, React, useState, useEffect, useCallback, useMemo, useRef, useReducer
-            );
-
-            if (ComponentToRender) {{
-                const root = ReactDOM.createRoot(document.getElementById('root'));
-                root.render(React.createElement(ComponentToRender));
-            }} else {{
-                showError("No valid React component found in generated code.");
+            }} catch (err) {{
+                showError(err.message || String(err));
             }}
-        }} catch (err) {{
-            showError(err.message || String(err));
-        }}
+        }};
     </script>
 </body>
 </html>"""

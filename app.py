@@ -2,6 +2,7 @@ import os
 import re
 import tempfile
 import subprocess
+import hashlib
 import streamlit as st
 import streamlit.components.v1 as components
 from openai import OpenAI
@@ -68,12 +69,6 @@ def clean_code(raw_text: str) -> str:
         raw_text = code_block_match.group(1)
 
     cleaned = raw_text.replace('```', '').strip()
-    last_export = cleaned.rfind('export ')
-    if last_export != -1:
-        end_idx = cleaned.find(';', last_export)
-        if end_idx != -1:
-            cleaned = cleaned[:end_idx + 1]
-
     return cleaned.strip()
 
 def generate_llm_response(prompt: str, system_prompt: str) -> str:
@@ -125,40 +120,47 @@ export default defineConfig({
             return False, f"Vitest Execution Error: {str(e)}"
 
 def build_preview(component_code: str) -> str:
-    return """<!DOCTYPE html>
+    # Sanitize code for browser Babel evaluation (strip ES module imports/exports)
+    sanitized_code = re.sub(r'import\s+.*?;', '', component_code)
+    sanitized_code = re.sub(r'export\s+default\s+function\s+', 'function ', sanitized_code)
+    sanitized_code = re.sub(r'export\s+default\s+', '', sanitized_code)
+    sanitized_code = re.sub(r'export\s+', '', sanitized_code)
+
+    return f"""<!DOCTYPE html>
 <html>
 <head>
+    <meta charset="UTF-8" />
+    <script src="[https://unpkg.com/react@18/umd/react.development.js](https://unpkg.com/react@18/umd/react.development.js)"></script>
+    <script src="[https://unpkg.com/react-dom@18/umd/react-dom.development.js](https://unpkg.com/react-dom@18/umd/react-dom.development.js)"></script>
+    <script src="[https://unpkg.com/@babel/standalone/babel.min.js](https://unpkg.com/@babel/standalone/babel.min.js)"></script>
+    <script src="[https://cdn.tailwindcss.com](https://cdn.tailwindcss.com)"></script>
     <style>
-        body { background-color: #020617; color: #f8fafc; font-family: system-ui, sans-serif; padding: 16px; margin: 0; }
-        .preview-card { background: #1e293b; border: 1px solid #334155; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
-        .badge { display: inline-flex; align-items: center; padding: 8px 16px; border-radius: 9999px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
-        .active { background-color: #22c55e; color: white; }
-        .inactive { background-color: #eab308; color: #1e293b; }
+        body {{ background-color: #020617; color: #f8fafc; font-family: system-ui, sans-serif; padding: 16px; margin: 0; }}
+        #root {{ background: #1e293b; border: 1px solid #334155; padding: 20px; border-radius: 8px; min-height: 250px; }}
+        .error-box {{ color: #f87171; background: #450a0a; border: 1px solid #991b1b; padding: 12px; border-radius: 6px; font-family: monospace; white-space: pre-wrap; font-size: 12px; }}
     </style>
 </head>
 <body>
-    <div class="preview-card">
-        <h3 style="margin-top: 0; color: #38bdf8; font-size: 16px;">Interactive Component Simulation</h3>
-        <p style="color: #94a3b8; font-size: 13px;">Live rendered via secure internal sandbox (Powered by NVIDIA NIM).</p>
-        <div style="margin-top: 16px;">
-            <div id="interactive-target">
-                <button id="simBtn" class="badge active" onclick="toggleState()">Status: Active (Click to Toggle)</button>
-            </div>
-        </div>
-    </div>
-    <script>
-        let isActive = true;
-        function toggleState() {
-            isActive = !isActive;
-            const btn = document.getElementById('simBtn');
-            if (isActive) {
-                btn.className = 'badge active';
-                btn.innerText = 'Status: Active (Click to Toggle)';
-            } else {
-                btn.className = 'badge inactive';
-                btn.innerText = 'Status: Inactive (Click to Toggle)';
-            }
-        }
+    <div id="root"></div>
+    <script type="text/babel" data-presets="react,typescript">
+        const {{ useState, useEffect, useCallback, useMemo, useRef, useReducer }} = React;
+
+        window.addEventListener('error', function(e) {{
+            document.getElementById('root').innerHTML = '<div class="error-box">Runtime Error: ' + e.message + '</div>';
+        }});
+
+        try {{
+            {sanitized_code}
+
+            if (typeof App !== 'undefined') {{
+                const root = ReactDOM.createRoot(document.getElementById('root'));
+                root.render(<App/>);
+            }} else {{
+                document.getElementById('root').innerHTML = '<div class="error-box">Error: Component "App" was not found in generated code.</div>';
+            }}
+        }} catch (err) {{
+            document.getElementById('root').innerHTML = '<div class="error-box">Compilation Error: ' + err.message + '</div>';
+        }}
     </script>
 </body>
 </html>"""
@@ -177,13 +179,32 @@ with st.container():
     desc_input = st.text_area("Jira Description", value="Component must feature explicit interface/type definitions, class or functional structure, state management, and toggle behavior.")
     run_button = st.button("Run Pipeline")
 
-# Session state containers for persistence across reruns
+# Default component for initial page load
+DEFAULT_CODE = """function App() {
+  const [status, setStatus] = React.useState("Active");
+  return (
+    <div className="p-4 bg-slate-900 rounded-lg text-white space-y-4">
+      <h3 className="text-sky-400 font-semibold">Interactive Component Simulation</h3>
+      <p className="text-slate-400 text-sm">Live rendered via secure internal sandbox (Powered by NVIDIA NIM).</p>
+      <button 
+        onClick={() => setStatus(status === "Active" ? "Inactive" : "Active")}
+        className={`px-4 py-2 rounded-full font-bold transition-all ${
+          status === 'Active' ? 'bg-green-500 text-white' : 'bg-yellow-500 text-slate-900'
+        }`}
+      >
+        Status: {status} (Click to Toggle)
+      </button>
+    </div>
+  );
+}"""
+
+# Session state initialization
 if "code_output" not in st.session_state:
-    st.session_state.code_output = "// Component code with interfaces will appear here..."
+    st.session_state.code_output = DEFAULT_CODE
 if "test_output" not in st.session_state:
-    st.session_state.test_output = "// Test cases will appear here..."
+    st.session_state.test_output = "// Vitest cases will appear here..."
 if "preview_html" not in st.session_state:
-    st.session_state.preview_html = "<html><body style='background:#020617;color:#94a3b8;font-family:sans-serif;padding:20px;'>Live preview will render here after execution...</body></html>"
+    st.session_state.preview_html = build_preview(DEFAULT_CODE)
 
 if run_button:
     status_box = st.status("Starting pipeline execution...", expanded=True)
@@ -191,7 +212,7 @@ if run_button:
     try:
         # Stage 1: Component Generation
         status_box.update(label="Stage 1: Generating Component & Interfaces via NVIDIA API...", state="running")
-        prompt_comp = f"Write a complete React component named App for: {summary_input}. Description: {desc_input}."
+        prompt_comp = f"Write a complete functional React component named App for: {summary_input}. Description: {desc_input}. Do not import external icon libraries."
         raw_code = generate_llm_response(prompt_comp, "You are an expert enterprise React developer. Always name the main component App. Output ONLY executable code enclosed in a markdown code block.")
         comp_code = clean_code(raw_code)
         st.session_state.code_output = comp_code
@@ -233,4 +254,6 @@ with col1:
 
 with col2:
     st.markdown("<h3 style='color: #c084fc; font-size: 14px;'>Live Component Preview</h3>", unsafe_allow_html=True)
-    components.html(st.session_state.preview_html, height=480, scrolling=True)
+    # Generate unique key per code hash to force Streamlit iframe reset on code update
+    code_hash = hashlib.md5(st.session_state.code_output.encode()).hexdigest()
+    components.html(st.session_state.preview_html, height=520, scrolling=True, key=f"preview_iframe_{code_hash}")

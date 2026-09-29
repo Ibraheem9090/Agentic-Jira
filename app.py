@@ -256,4 +256,4 @@ with col2:
     st.markdown("<h3 style='color: #c084fc; font-size: 14px;'>Live Component Preview</h3>", unsafe_allow_html=True)
     # Generate unique key per code hash to force Streamlit iframe reset on code update
     code_hash = hashlib.md5(st.session_state.code_output.encode()).hexdigest()
-    components.html(st.session_state.preview_html, height=520, scrolling=True, key=f"preview_iframe_{code_hash}")
+    components.html(st.session_state.preview_html, height=520, scrolling=True)

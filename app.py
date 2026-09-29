@@ -45,14 +45,21 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 2. Initialize NVIDIA API Client
-# Using your provided NVIDIA API Key and Mistral-Nemotron endpoint
-NVIDIA_API_KEY = "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"
+# 2. Retrieve API Key securely from Streamlit Secrets or Environment Variables
+api_key = st.secrets.get("NVIDIA_API_KEY") or os.getenv("NVIDIA_API_KEY")
+
+if not api_key:
+    st.error("Missing NVIDIA_API_KEY! Please configure it in .streamlit/secrets.toml or your environment variables.")
+    st.stop()
+
+# Ensure raw key format (strip accidental 'Bearer ' prefix if passed via secrets)
+clean_api_key = api_key.replace("Bearer ", "").strip()
+
 MODEL_NAME = "google/gemma-4-31b-it"
 
 client = OpenAI(
     base_url="https://integrate.api.nvidia.com/v1",
-    api_key=NVIDIA_API_KEY
+    api_key=clean_api_key
 )
 
 def clean_code(raw_text: str) -> str:

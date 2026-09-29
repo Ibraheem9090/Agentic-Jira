@@ -120,20 +120,22 @@ export default defineConfig({
             return False, f"Vitest Execution Error: {str(e)}"
 
 def build_preview(component_code: str) -> str:
-    # Sanitize code for browser Babel evaluation (strip ES module imports/exports)
-    sanitized_code = re.sub(r'import\s+.*?;', '', component_code)
-    sanitized_code = re.sub(r'export\s+default\s+function\s+', 'function ', sanitized_code)
-    sanitized_code = re.sub(r'export\s+default\s+', '', sanitized_code)
-    sanitized_code = re.sub(r'export\s+', '', sanitized_code)
+    # 1. Clean out multi-line and single-line imports
+    sanitized = re.sub(r'import\s+[\s\S]*?from\s+[\'"][^\'"]+[\'"];?', '', component_code)
+    
+    # 2. Normalize exports
+    sanitized = re.sub(r'export\s+default\s+function\s+(\w+)', r'function App', sanitized)
+    sanitized = re.sub(r'export\s+default\s+(\w+);?', r'const App = \1;', sanitized)
+    sanitized = re.sub(r'export\s+', '', sanitized)
 
     return f"""<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8" />
-    <script src="[https://unpkg.com/react@18/umd/react.development.js](https://unpkg.com/react@18/umd/react.development.js)"></script>
-    <script src="[https://unpkg.com/react-dom@18/umd/react-dom.development.js](https://unpkg.com/react-dom@18/umd/react-dom.development.js)"></script>
-    <script src="[https://unpkg.com/@babel/standalone/babel.min.js](https://unpkg.com/@babel/standalone/babel.min.js)"></script>
-    <script src="[https://cdn.tailwindcss.com](https://cdn.tailwindcss.com)"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body {{ background-color: #020617; color: #f8fafc; font-family: system-ui, sans-serif; padding: 16px; margin: 0; }}
         #root {{ background: #1e293b; border: 1px solid #334155; padding: 20px; border-radius: 8px; min-height: 250px; }}
@@ -141,25 +143,41 @@ def build_preview(component_code: str) -> str:
     </style>
 </head>
 <body>
-    <div id="root"></div>
+    <div id="root">Loading component preview...</div>
     <script type="text/babel" data-presets="react,typescript">
         const {{ useState, useEffect, useCallback, useMemo, useRef, useReducer }} = React;
 
-        window.addEventListener('error', function(e) {{
-            document.getElementById('root').innerHTML = '<div class="error-box">Runtime Error: ' + e.message + '</div>';
-        }});
+        function renderError(msg) {{
+            document.getElementById('root').innerHTML = '<div class="error-box"><b>Preview Runtime Error:</b><br/>' + msg + '</div>';
+        }}
+
+        window.onerror = function(message) {{
+            renderError(message);
+        }};
 
         try {{
-            {sanitized_code}
+            {sanitized}
 
+            // Determine component to render (check for App first, or fallback to any declared component)
+            let ComponentToRender = null;
             if (typeof App !== 'undefined') {{
-                const root = ReactDOM.createRoot(document.getElementById('root'));
-                root.render(<App/>);
+                ComponentToRender = App;
             }} else {{
-                document.getElementById('root').innerHTML = '<div class="error-box">Error: Component "App" was not found in generated code.</div>';
+                // Search scope for any capital-letter function component
+                const keys = Object.keys(window).filter(k => typeof window[k] === 'function' && /^[A-Z]/.test(k));
+                if (keys.length > 0) {{
+                    ComponentToRender = window[keys[keys.length - 1]];
+                }}
+            }}
+
+            if (ComponentToRender) {{
+                const root = ReactDOM.createRoot(document.getElementById('root'));
+                root.render(<ComponentToRender />);
+            }} else {{
+                renderError("Could not find a valid React component to mount.");
             }}
         }} catch (err) {{
-            document.getElementById('root').innerHTML = '<div class="error-box">Compilation Error: ' + err.message + '</div>';
+            renderError(err.message || err);
         }}
     </script>
 </body>

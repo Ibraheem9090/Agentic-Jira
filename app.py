@@ -47,7 +47,7 @@ st.markdown("""
 
 # 2. Initialize NVIDIA API Client
 # Using your provided NVIDIA API Key and Mistral-Nemotron endpoint
-NVIDIA_API_KEY = "Bearer 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"
+NVIDIA_API_KEY = "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"
 MODEL_NAME = "google/gemma-4-31b-it"
 
 client = OpenAI(

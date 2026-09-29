@@ -120,7 +120,7 @@ export default defineConfig({
             return False, f"Vitest Execution Error: {str(e)}"
 
 def build_preview(component_code: str) -> str:
-    # Safely escape backslashes and backticks for JavaScript template string insertion
+    # Safely escape backslashes and backticks for JavaScript string insertion
     escaped_code = component_code.replace('\\', '\\\\').replace('`', '\\`').replace('${', '\\${')
 
     return f"""<!DOCTYPE html>
@@ -159,12 +159,13 @@ def build_preview(component_code: str) -> str:
                 .replace(/export\s+default\s+/g, '')
                 .replace(/export\s+/g, '');
 
-            // 2. Programmatically transpile JSX & TypeScript using Babel
+            // 2. Transpile JSX & TSX with explicit filename set
             const transpiled = Babel.transform(cleanCode, {{
+                filename: 'Component.tsx',
                 presets: ['react', 'typescript']
             }}).code;
 
-            // 3. Execute in isolated scope with standard React hooks
+            // 3. Execute in scope with standard React hooks
             const {{ useState, useEffect, useCallback, useMemo, useRef, useReducer }} = React;
 
             const execFn = new Function(
@@ -172,7 +173,6 @@ def build_preview(component_code: str) -> str:
                 `
                 ${{transpiled}}
 
-                // Search for generated Component
                 let Comp = null;
                 if (typeof App !== 'undefined') Comp = App;
                 

@@ -71,6 +71,12 @@ def clean_code(raw_text: str) -> str:
     cleaned = raw_text.replace('```', '').strip()
     return cleaned.strip()
 
+prompt_comp = (
+    f"Write a complete functional React component named App for: {summary_input}. "
+    f"Description: {desc_input}. "
+    f"Use Tailwind CSS classes for styling. Do NOT use inline <style> blocks, styled-components, or external icon libraries."
+)
+
 def generate_llm_response(prompt: str, system_prompt: str) -> str:
     try:
         response = client.chat.completions.create(
@@ -142,7 +148,7 @@ def build_preview(component_code: str) -> str:
 
     <script>
         function showError(msg) {{
-            document.getElementById('root').innerHTML = '<div class="error-box"><b>Preview Runtime Error:</b><br/>' + msg + '</div>';
+            document.getElementById('root').innerHTML = '<div class="error-box"><b>Preview Syntax/Runtime Error:</b><br/>' + msg + '</div>';
         }}
 
         window.onerror = function(message) {{
@@ -159,7 +165,7 @@ def build_preview(component_code: str) -> str:
                 .replace(/export\s+default\s+/g, '')
                 .replace(/export\s+/g, '');
 
-            // 2. Transpile JSX & TSX with explicit filename set
+            // 2. Transpile TSX/JSX with strict filename mapping
             const transpiled = Babel.transform(cleanCode, {{
                 filename: 'Component.tsx',
                 presets: ['react', 'typescript']

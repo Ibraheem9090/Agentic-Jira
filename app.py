@@ -71,12 +71,6 @@ def clean_code(raw_text: str) -> str:
     cleaned = raw_text.replace('```', '').strip()
     return cleaned.strip()
 
-prompt_comp = (
-    f"Write a complete functional React component named App for: {summary_input}. "
-    f"Description: {desc_input}. "
-    f"Use Tailwind CSS classes for styling. Do NOT use inline <style> blocks, styled-components, or external icon libraries."
-)
-
 def generate_llm_response(prompt: str, system_prompt: str) -> str:
     try:
         response = client.chat.completions.create(
@@ -133,10 +127,10 @@ def build_preview(component_code: str) -> str:
 <html>
 <head>
     <meta charset="UTF-8" />
-    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="[https://unpkg.com/react@18/umd/react.development.js](https://unpkg.com/react@18/umd/react.development.js)"></script>
+    <script src="[https://unpkg.com/react-dom@18/umd/react-dom.development.js](https://unpkg.com/react-dom@18/umd/react-dom.development.js)"></script>
+    <script src="[https://unpkg.com/@babel/standalone@7/babel.min.js](https://unpkg.com/@babel/standalone@7/babel.min.js)"></script>
+    <script src="[https://cdn.tailwindcss.com](https://cdn.tailwindcss.com)"></script>
     <style>
         body {{ background-color: #020617; color: #f8fafc; font-family: system-ui, sans-serif; padding: 16px; margin: 0; }}
         #root {{ background: #1e293b; border: 1px solid #334155; padding: 20px; border-radius: 8px; min-height: 250px; }}
@@ -259,7 +253,11 @@ if run_button:
     try:
         # Stage 1: Component Generation
         status_box.update(label="Stage 1: Generating Component & Interfaces via NVIDIA API...", state="running")
-        prompt_comp = f"Write a complete functional React component named App for: {summary_input}. Description: {desc_input}. Do not import external icon libraries."
+        prompt_comp = (
+            f"Write a complete functional React component named App for: {summary_input}. "
+            f"Description: {desc_input}. "
+            f"Use Tailwind CSS classes for styling. Do NOT use inline <style> blocks, styled-components, or external icon libraries."
+        )
         raw_code = generate_llm_response(prompt_comp, "You are an expert enterprise React developer. Always name the main component App. Output ONLY executable code enclosed in a markdown code block.")
         comp_code = clean_code(raw_code)
         st.session_state.code_output = comp_code
@@ -301,6 +299,5 @@ with col1:
 
 with col2:
     st.markdown("<h3 style='color: #c084fc; font-size: 14px;'>Live Component Preview</h3>", unsafe_allow_html=True)
-    # Generate unique key per code hash to force Streamlit iframe reset on code update
     code_hash = hashlib.md5(st.session_state.code_output.encode()).hexdigest()
     components.html(st.session_state.preview_html, height=520, scrolling=True)

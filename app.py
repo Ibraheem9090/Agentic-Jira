@@ -55,7 +55,7 @@ if not api_key:
 # Ensure raw key format (strip accidental 'Bearer ' prefix if passed via secrets)
 clean_api_key = api_key.replace("Bearer ", "").strip()
 
-MODEL_NAME = "google/gemma-4-31b-it"
+MODEL_NAME = "moonshotai/kimi-k3"
 
 client = OpenAI(
     base_url="https://integrate.api.nvidia.com/v1",

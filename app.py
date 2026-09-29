@@ -120,13 +120,8 @@ export default defineConfig({
             return False, f"Vitest Execution Error: {str(e)}"
 
 def build_preview(component_code: str) -> str:
-    # 1. Clean out multi-line and single-line imports
-    sanitized = re.sub(r'import\s+[\s\S]*?from\s+[\'"][^\'"]+[\'"];?', '', component_code)
-    
-    # 2. Normalize exports
-    sanitized = re.sub(r'export\s+default\s+function\s+(\w+)', r'function App', sanitized)
-    sanitized = re.sub(r'export\s+default\s+(\w+);?', r'const App = \1;', sanitized)
-    sanitized = re.sub(r'export\s+', '', sanitized)
+    # Safely escape backslashes and backticks for JavaScript template string insertion
+    escaped_code = component_code.replace('\\', '\\\\').replace('`', '\\`').replace('${', '\\${')
 
     return f"""<!DOCTYPE html>
 <html>
@@ -143,41 +138,69 @@ def build_preview(component_code: str) -> str:
     </style>
 </head>
 <body>
-    <div id="root">Loading component preview...</div>
-    <script type="text/babel" data-presets="react,typescript">
-        const {{ useState, useEffect, useCallback, useMemo, useRef, useReducer }} = React;
+    <div id="root">Initializing sandbox...</div>
 
-        function renderError(msg) {{
+    <script>
+        function showError(msg) {{
             document.getElementById('root').innerHTML = '<div class="error-box"><b>Preview Runtime Error:</b><br/>' + msg + '</div>';
         }}
 
         window.onerror = function(message) {{
-            renderError(message);
+            showError(message);
         }};
 
         try {{
-            {sanitized}
+            const rawCode = `{escaped_code}`;
 
-            // Determine component to render (check for App first, or fallback to any declared component)
-            let ComponentToRender = null;
-            if (typeof App !== 'undefined') {{
-                ComponentToRender = App;
-            }} else {{
-                // Search scope for any capital-letter function component
-                const keys = Object.keys(window).filter(k => typeof window[k] === 'function' && /^[A-Z]/.test(k));
-                if (keys.length > 0) {{
-                    ComponentToRender = window[keys[keys.length - 1]];
+            // 1. Strip ES Module import and export syntax
+            let cleanCode = rawCode
+                .replace(/import\s+[\s\S]*?from\s+['"][^'"]+['"];?/g, '')
+                .replace(/import\s+['"][^'"]+['"];?/g, '')
+                .replace(/export\s+default\s+/g, '')
+                .replace(/export\s+/g, '');
+
+            // 2. Programmatically transpile JSX & TypeScript using Babel
+            const transpiled = Babel.transform(cleanCode, {{
+                presets: ['react', 'typescript']
+            }}).code;
+
+            // 3. Execute in isolated scope with standard React hooks
+            const {{ useState, useEffect, useCallback, useMemo, useRef, useReducer }} = React;
+
+            const execFn = new Function(
+                'React', 'useState', 'useEffect', 'useCallback', 'useMemo', 'useRef', 'useReducer',
+                `
+                ${{transpiled}}
+
+                // Search for generated Component
+                let Comp = null;
+                if (typeof App !== 'undefined') Comp = App;
+                
+                if (!Comp) {{
+                    const vars = Object.keys(window);
+                    for (let v of vars) {{
+                        if (typeof window[v] === 'function' && /^[A-Z]/.test(v)) {{
+                            Comp = window[v];
+                            break;
+                        }}
+                    }}
                 }}
-            }}
+                return Comp;
+                `
+            );
+
+            const ComponentToRender = execFn.call(
+                window, React, useState, useEffect, useCallback, useMemo, useRef, useReducer
+            );
 
             if (ComponentToRender) {{
                 const root = ReactDOM.createRoot(document.getElementById('root'));
-                root.render(<ComponentToRender />);
+                root.render(React.createElement(ComponentToRender));
             }} else {{
-                renderError("Could not find a valid React component to mount.");
+                showError("No valid React component found in generated code.");
             }}
         }} catch (err) {{
-            renderError(err.message || err);
+            showError(err.message || String(err));
         }}
     </script>
 </body>

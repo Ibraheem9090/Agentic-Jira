@@ -64,12 +64,16 @@ client = OpenAI(
 )
 
 def clean_code(raw_text: str) -> str:
+    # 1. Try matching fully closed markdown code blocks
     code_block_match = re.search(r'```(?:jsx|tsx|javascript|typescript|js)?\s*([\s\S]*?)```', raw_text, re.IGNORECASE)
     if code_block_match:
-        raw_text = code_block_match.group(1)
+        return code_block_match.group(1).strip()
 
-    cleaned = raw_text.replace('```', '').strip()
-    return cleaned.strip()
+    # 2. Fallback for truncated LLM responses (missing closing ```)
+    cleaned = re.sub(r'^\s*```(?:jsx|tsx|javascript|typescript|js)?\s*', '', raw_text, flags=re.IGNORECASE)
+    cleaned = re.sub(r'^\s*(?:jsx|tsx|javascript|typescript|js)\n', '', cleaned, flags=re.IGNORECASE)
+    cleaned = cleaned.replace('```', '').strip()
+    return cleaned
 
 def generate_llm_response(prompt: str, system_prompt: str) -> str:
     try:
@@ -80,7 +84,7 @@ def generate_llm_response(prompt: str, system_prompt: str) -> str:
                 {"role": "user", "content": prompt}
             ],
             temperature=0.2,
-            max_tokens=1500,
+            max_tokens=4000,  # Increased from 1500 to fit full multi-step components
             stream=False
         )
         return response.choices[0].message.content
